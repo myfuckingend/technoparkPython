@@ -58,13 +58,45 @@ class TextHistory:
         if from_version < 0 or from_version > to_version or to_version > self._version:
             raise ValueError
         else:
-            new_action = []
+            self.new_action = []
+            act = None
             for action in self._actions:
-                if not action.from_version < from_version and \
-                        not action.from_version >= to_version and to_version != 0:
-                    new_action.append(action)
-            return new_action
+                if not action.from_version < from_version and not action.to_version > to_version:
+                    act = self.optimize(act, action)
+                elif action.to_version > to_version:
+                    break
+            if act != None:
+                self.new_action.append(act)
+            return self.new_action
 
+    def optimize(self, act, action):
+        if isinstance(action, DeleteAction) and isinstance(act, DeleteAction):
+            if action.pos in range(act.pos, act.length + 1):
+                act.length = act.length + action.length
+                act.pos = min(act.pos, action.pos)
+            else:
+                self.action_to_return.append(act)
+                act = action
+                return act
+        elif isinstance(action, InsertAction) and isinstance(act, InsertAction):
+            if action.pos in range(act.pos, act.pos + len(act.text) + 1):
+                act.text = act.text[:action.pos] + action.text + act.text[action.pos:]
+            else:
+                self.new_action.append(act)
+                act = action
+                return act
+        elif isinstance(action, ReplaceAction):
+            if act != None:
+                self.new_action.append(act)
+            self.new_action.append(action)
+            act = None
+            return act
+        else:
+            if act != None:
+                self.new_action.append(act)
+            act = action
+
+        return act
 
 class Action:
 
@@ -84,11 +116,21 @@ class InsertAction(Action):
         line = line[:self.pos] + self.text + line[self.pos:]
         return line
 
+    def __repr__(self):
+        return "InsertAction(pos = {!r}, text = {!r}, " \
+               "v1 = {!r}, v2 = {!r})".format(self.pos, self.text,
+                self.from_version, self.to_version)
+
 class ReplaceAction(Action):
 
     def apply(self, line):
         line = line[:self.pos] + self.text + line[self.pos + len(self.text):]
         return line
+
+    def __repr__(self):
+        return "ReplaceAction(pos = {!r}, text = {!r}, " \
+               "v1 = {!r}, v2 = {!r})".format(self.pos, self.text,
+                self.from_version, self.to_version)
 
 class DeleteAction(Action):
 
@@ -101,3 +143,9 @@ class DeleteAction(Action):
     def apply(self, line):
         line = line[:self.pos] + line[self.pos + self.length:]
         return line
+
+    def __repr__(self):
+        return "DeleteAction(pos = {!r}, length = {!r}, " \
+               "v1 = {!r}, v2 = {!r})".format(self.pos, self.length,
+                                              self.from_version,
+                                              self.to_version)
